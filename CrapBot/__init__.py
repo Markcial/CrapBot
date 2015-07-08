@@ -1,6 +1,7 @@
 
 import requests, re, os
 
+
 def matches(pattern):
     def decorator(fn):
         def match(subject):
@@ -13,10 +14,6 @@ def matches(pattern):
         return fn
     return decorator
 
-def api_method(fn):
-    def decorator(fn):
-        return fn
-    return decorator
 
 class Api(object):
     _api_url = 'https://api.telegram.org/bot{}/'
@@ -35,16 +32,18 @@ class Api(object):
         'getUpdates',
         'setWebhook'
     ]
+
     def ep(self):
         token = os.environ['CRAP_BOT_TOKEN']
         return self._api_url.format(token)
 
     def get_api_method(self, method):
         url = self.ep() + method
+
         def call(params=None):
             if params is None:
                 params = {}
-            r = requests.get(url, params)
+            r = requests.get(url, params=params)
             return r.json()
         return call
 
@@ -52,6 +51,7 @@ class Api(object):
         if name in self._methods:
             return self.get_api_method(name)
         raise AttributeError('{} instance has no attribute {}'.format(self.__class__, name))
+
 
 class Commands:
     @matches(r'\/help(.+)?')
@@ -75,3 +75,8 @@ class Commands:
         method = candidates.pop()
         params = method._match(text)
         return method(clss, **params)
+
+
+def setupWebhook():
+    api = Api()
+    api.setWebHook({'url': ''})
