@@ -1,5 +1,6 @@
 
 import requests, re, os
+from random import choice
 
 
 def matches(pattern):
@@ -10,7 +11,7 @@ def matches(pattern):
             if matches:
                 return matches.groupdict()
             return False
-        fn._match = match
+        fn.match = match
         return fn
     return decorator
 
@@ -52,31 +53,56 @@ class Api(object):
             return self.get_api_method(name)
         raise AttributeError('{} instance has no attribute {}'.format(self.__class__, name))
 
+quotes = [
+    'Hi there minion, what do you want?',
+    'Hi there minion, i need you to get rid of those skags!',
+]
+
 
 class Commands:
+    api = None
     @matches(r'\/help(.+)?')
-    def help(self):
-        return 'help'
+    def help(self, message):
+        chat_id = message['chat']['id']
+        self.apiCall('sendMessage', {'chat_id': chat_id, 'text': 'Help message'})
 
     @matches(r'\/salute ?(?P<name>[^\s]+)?')
-    def salute(self, name='You'):
-        return 'Hi {}'.format(name)
+    def salute(self, message, name=None):
+        if name is None:
+            name = 'You'
+        chat_id = message['chat']['id']
+        self.apiCall('sendMessage', {'chat_id': chat_id, 'text': 'Hi {}'.format(name)})
 
-    @matches(r'\/enviar ?(?P<what>[^\s]+)? ?(?P<whom>[^\s]+)?')
-    def enviar(self, what='Nothing', whom="Noone"):
-        return 'Enviar un {} a {}'.format(what, whom)
+    @matches(r'\/quote(.+)?')
+    def quote(self, message):
+        chat_id = message['chat']['id']
+        self.apiCall('sendMessage', {'chat_id': chat_id, 'text': choice(quotes)})
+
+    @matches(r'\/foo ?(?P<name>[^\s]+)?')
+    def foo(self, message, name=None):
+        if name is None:
+            name = 'Bar'
+        chat_id = message['chat']['id']
+        self.apiCall('sendMessage', {'chat_id': chat_id, 'text': 'Spam spam spam spam spam {}'.format(name)})
 
     @classmethod
-    def match(clss, text):
-        methods = [getattr(clss, method) for method in dir(clss) if callable(getattr(clss, method)) and hasattr(getattr(clss, method), '_match')]
-        candidates = [m for m in methods if m._match(text)]
+    def apiCall(cls, method, params):
+        if cls.api is None:
+            cls.api = Api()
+        method = getattr(cls.api, method)
+        return method(params)
+
+    @classmethod
+    def process(cls, update):
+        if 'message' not in update.keys():
+            return
+        print(update)
+        message = update['message']
+        text = message['text']
+        methods = [getattr(cls, method) for method in dir(cls) if callable(getattr(cls, method)) and hasattr(getattr(cls, method), 'match')]
+        candidates = [m for m in methods if m.match(text)]
         if len(candidates) > 1 or len(candidates) == 0:
-            return clss.help(clss)
+            return cls.help(cls, message)
         method = candidates.pop()
-        params = method._match(text)
-        return method(clss, **params)
-
-
-def setupWebhook():
-    api = Api()
-    api.setWebHook({'url': ''})
+        params = method.match(text)
+        return method(cls, message, **params)

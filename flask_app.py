@@ -17,10 +17,7 @@ def hello_world():
 def bot():
     update = request.json
     if update:
-        chat_id = update['message']['chat']['id']
-        cmd = update['message']['text']
-        message = Commands.match(cmd)
-        api.sendMessage({'chat_id': chat_id, 'text':message})
+        Commands.process(update)
     return 'Ok'
 
 if __name__ == '__main__':
@@ -31,8 +28,5 @@ if __name__ == '__main__':
             update_id = update['update_id']
             if update_id not in processed_updates:
                 processed_updates.append(update['update_id'])
-                cmd = update['message']['text']
-                chat_id = update['message']['chat']['id']
-                message = Commands.match(cmd)
-                api.sendMessage({'chat_id': chat_id, 'text': message})
+                Commands.process(update)
         sleep(10)
