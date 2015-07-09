@@ -7,8 +7,6 @@ from time import sleep
 
 app = Flask(__name__)
 
-api = Api()
-
 @app.route('/')
 def hello_world():
     return 'Hello from Flask!'
@@ -23,7 +21,7 @@ def bot():
 if __name__ == '__main__':
     processed_updates = []
     while True:
-        updates = api.getUpdates()
+        updates = Api.getUpdates(offset=687926805)
         for update in updates['result']:
             update_id = update['update_id']
             if update_id not in processed_updates:
