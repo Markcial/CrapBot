@@ -1,66 +1,11 @@
-
-import re
-from random import choice
-from CrapBot.Api import sendMessage, sendPhoto, sendSticker
-
-def matches(pattern):
-    def decorator(fn):
-        def match(subject):
-            expr = re.compile(pattern)
-            matches = expr.match(subject)
-            if matches:
-                return matches.groupdict()
-            return False
-        fn.match = match
-        return fn
-    return decorator
-
-quotes = [
-    "Hey everybody! Check out my package!",
-    "Let's get this party started!",
-    "Glitching weirdness is a term of endearment, right?",
-    "Recompiling my combat code!",
-    "This time it'll be awesome, I promise!",
-    "Look out everybody! Things are about to get awesome!",
-    "I am a tornado of death and bullets!",
-    "Stop me before I kill again, except don't!",
-    "Hehehehe, mwaa ha ha ha, MWAA HA HA HA!",
-    "You call yourself a badass?",
-    "Wow, did I really do that?",
-    "Can, can I open my eyes now?",
-    "Aww! Now I want a snow cone.",
-    "Take a chill pill!",
-    "Cryo me a river!",
-    "Freeze! I don't know why I said that.",
-    "Don't cryo!",
-    "Frigid.",
-    "Solid! Get it? As in frozen?",
-    "Icely done.",
-    "My assets... frozen!",
-    "I can't feel my fingers! Gah! I don't have any fingers!",
-    "Too cold... can't move!",
-    "I am a robot popsicle!",
-    "Brrh... So cold... brrh...",
-    "Metal gears... frozen solid!",
-    "Flesh fireworks!",
-    "Oh, quit falling to pieces.",
-    "Is that what people look like inside?",
-    "Ooh, squishy bits!",
-    "Meat confetti!",
-    "Huh, robot's don't do that.",
-    "This time it'll be awesome, I promise!"
-    "Hey everybody, check out my package!",
-    "Defragmenting!",
-    "Recompiling my combat code!",
-    "Running the sequencer!",
-    "It's happening... it's happening!",
-    "It's about to get magical!",
-    "What will he do next?",
-    "Things are about to get awesome!",
-    "Let's get this party started!",
-    "Glitchy weirdness is term of endearment, right?",
-    "Push this button, flip this dongle, voila! Help me!"
-]
+import logging
+import pickle
+import os
+from time import sleep
+from CrapBot import Config
+from CrapBot.Api.Objects import Update
+from CrapBot.Api import send_message, send_photo, send_sticker, get_updates
+from CrapBot.Commands import Salute, Status, SaveQuote, RandomQuote, SaveImage, RandomImage
 
 stickers = {
     'lol': 'BQADBAADPgEAAvCZ8AABEmXm6q67HeYC',
@@ -74,36 +19,70 @@ stickers = {
     'like a sir': 'BQADBAAD2wEAAvlsRwIOLYS2mMtnCwI'
 }
 
-class Commands:
-    @matches(r'\/salute ?(?P<name>[^\s]+)?')
-    def salute(self, message, name=None):
-        if name is None:
-            name = 'You'
-        chat_id = message['chat']['id']
-        sendMessage(chat_id, 'Hi {}'.format(name))
+class Bunch:
+    def __init__(self, **kwds):
+        self.__dict__.update(kwds)
 
-    @matches(r'\/quote(.+)?')
-    def quote(self, message):
-        chat_id = message['chat']['id']
-        sendMessage(chat_id, choice(quotes))
+class Storage(object):
+    def __init__(self):
+        self.db = Bunch()
+        if os.path.exists(Config.cache_file):
+            self.db = pickle.load(open(Config.cache_file, 'rb'))
 
-    @matches(r'^\/sticker (?P<phrase>.*)$')
-    def sticker(self, message, phrase):
-        chat_id = message['chat']['id']
-        if phrase not in stickers.keys():
-            return
-        sendSticker(chat_id, stickers[phrase])
+    def save(self, name, val):
+        setattr(self.db, name, val)
+        pickle.dump(self.db, open(Config.cache_file, 'wb'))
 
-    @classmethod
-    def process(cls, update):
-        if 'message' not in update.keys():
-            return
-        message = update['message']
-        if 'text' in message.keys():
-            text = message['text']
-            methods = [getattr(cls, method) for method in dir(cls) if callable(getattr(cls, method)) and hasattr(getattr(cls, method), 'match')]
-            candidates = [m for m in methods if m.match(text) is not False]
-            if len(candidates) == 1:
-                method = candidates.pop()
-                params = method.match(text)
-                return method(cls, message, **params)
+    def exists(self, name):
+        return hasattr(self.db, name)
+
+    def get(self, name):
+        return getattr(self.db, name)
+
+
+class Bot(object):
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        self.listening = False
+        self.conversation = None
+        self.offset = None
+        self.storage = Storage()
+        self.commands = {}
+        self.current_command = None
+        self.add_command('status', Status)
+        self.add_command('salute', Salute)
+        self.add_command('save_quote', SaveQuote)
+        self.add_command('random_quote', RandomQuote)
+        self.add_command('save_image', SaveImage)
+        self.add_command('random_image', RandomImage)
+
+    def add_command(self, name, cmd):
+        self.commands[name] = cmd(self)
+
+    def listen(self):
+        logging.debug('ffffff')
+        self.listening = True
+        while self.listening:
+            response = get_updates(offset=self.offset)
+            for u in response['result']:
+                self.handle(Update(u['update_id'], u['message']))
+                self.offset = u['update_id'] + 1
+            sleep(5)
+
+    def handle(self, update):
+
+        print(update)
+
+        # do we have a conversation already started?
+        if self.conversation is not None:
+            # normal flow for the conversation until it cancels the conversation
+            print('conversation!')
+            self.current_command.next(update)
+
+        if update.message.type == 'text':
+            if update.message.text[0] == '/':
+                command = update.message.text[1:].split(" ")[0].lower()
+                if command in self.commands.keys():
+                    cmd = self.commands[command]
+                    cmd.main(update)
+

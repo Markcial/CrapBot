@@ -1,10 +1,10 @@
 
 # A very simple Flask Hello World app for you to get started with...
-
+import logging, sys
 from flask import Flask, request
-from CrapBot import Commands, Api
-from time import sleep
+from CrapBot import Bot
 
+crap_bot = Bot()
 app = Flask(__name__)
 
 @app.route('/')
@@ -15,16 +15,13 @@ def hello_world():
 def bot():
     update = request.json
     if update:
-        Commands.process(update)
+        crap_bot.handle(update)
     return 'Ok'
 
 if __name__ == '__main__':
-    processed_updates = []
-    while True:
-        updates = Api.getUpdates(offset=687926805)
-        for update in updates['result']:
-            update_id = update['update_id']
-            if update_id not in processed_updates:
-                processed_updates.append(update['update_id'])
-                Commands.process(update)
-        sleep(10)
+    from CrapBot import Logger
+    Logger.warn('bot started')
+    #from CrapBot.Api import set_webhook
+    #r = set_webhook()
+    #print(r)
+    crap_bot.listen()
